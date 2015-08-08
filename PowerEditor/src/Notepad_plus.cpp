@@ -56,7 +56,10 @@ enum tb_stat {tb_saved, tb_unsaved, tb_ro};
 
 #define NPP_INTERNAL_FUCTION_STR TEXT("Notepad++::InternalFunction")
 
-#define SOURCECODEPRO_FONT  TEXT("SourceCodePro-Regular.otf")
+#define SOURCECODEPRO_FONT  TEXT("SourceCodePro-Regular.ttf")
+#define SOURCECODEPRO_I_FONT  TEXT("SourceCodePro-It.ttf")
+#define SOURCECODEPRO_B_FONT  TEXT("SourceCodePro-Bold.ttf")
+#define SOURCECODEPRO_IB_FONT  TEXT("SourceCodePro-BoldIt.ttf")
 
 int docTabIconIDs[] = {IDI_SAVED_ICON, IDI_UNSAVED_ICON, IDI_READONLY_ICON};
 
@@ -126,16 +129,10 @@ ToolBarButtonUnit toolBarIcons[] = {
 
 
 
-
-
-Notepad_plus::Notepad_plus(): _mainWindowStatus(0), _pDocTab(NULL), _pEditView(NULL),
-	_pMainSplitter(NULL),
-    _recordingMacro(false), _pTrayIco(NULL), _isUDDocked(false), _pFileSwitcherPanel(NULL),
-	_pProjectPanel_1(NULL), _pProjectPanel_2(NULL), _pProjectPanel_3(NULL), _pDocMap(NULL), _pFuncList(NULL),
-	_linkTriggered(true), _isHotspotDblClicked(false), _isFolding(false),
-	_sysMenuEntering(false),
-	_autoCompleteMain(&_mainEditView), _autoCompleteSub(&_subEditView), _smartHighlighter(&_findReplaceDlg),
-	_isFileOpening(false), _pAnsiCharPanel(NULL), _pClipboardHistoryPanel(NULL)
+Notepad_plus::Notepad_plus()
+	: _autoCompleteMain(&_mainEditView)
+	, _autoCompleteSub(&_subEditView)
+	, _smartHighlighter(&_findReplaceDlg)
 {
 	ZeroMemory(&_prevSelectedRange, sizeof(_prevSelectedRange));
 
@@ -180,7 +177,6 @@ Notepad_plus::Notepad_plus(): _mainWindowStatus(0), _pDocTab(NULL), _pEditView(N
 	_isAdministrator = is_admin ? true : false;
 }
 
-
 Notepad_plus::~Notepad_plus()
 {
 	// ATTENTION : the order of the destruction is very important
@@ -201,11 +197,11 @@ Notepad_plus::~Notepad_plus()
 	delete _pProjectPanel_3;
 	delete _pDocMap;
 	delete _pFuncList;
-	::RemoveFontResource(SOURCECODEPRO_FONT);
+	::RemoveFontResourceEx(SOURCECODEPRO_FONT, FR_PRIVATE, 0);
+	::RemoveFontResourceEx(SOURCECODEPRO_I_FONT, FR_PRIVATE, 0);
+	::RemoveFontResourceEx(SOURCECODEPRO_B_FONT, FR_PRIVATE, 0);
+	::RemoveFontResourceEx(SOURCECODEPRO_IB_FONT, FR_PRIVATE, 0);
 }
-
-
-
 
 LRESULT Notepad_plus::init(HWND hwnd)
 {
@@ -213,7 +209,10 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	NppGUI & nppGUI = (NppGUI &)pNppParam->getNppGUI();
 
 	// Add Main font
-	::AddFontResource(SOURCECODEPRO_FONT);
+	::AddFontResourceEx(SOURCECODEPRO_FONT, FR_PRIVATE, 0);
+	::AddFontResourceEx(SOURCECODEPRO_I_FONT, FR_PRIVATE, 0);
+	::AddFontResourceEx(SOURCECODEPRO_B_FONT, FR_PRIVATE, 0);
+	::AddFontResourceEx(SOURCECODEPRO_IB_FONT, FR_PRIVATE, 0);
 
 	// Menu
 	_mainMenuHandle = ::GetMenu(hwnd);
@@ -363,16 +362,16 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	bool isVertical = (nppGUI._splitterPos == POS_VERTICAL);
 
     _subSplitter.init(_pPublicInterface->getHinst(), hwnd);
-    _subSplitter.create(&_mainDocTab, &_subDocTab, 8, DYNAMIC, 50, isVertical);
+    _subSplitter.create(&_mainDocTab, &_subDocTab, 8, SplitterMode::DYNAMIC, 50, isVertical);
 
     //--Status Bar Section--//
 	bool willBeShown = nppGUI._statusBarShow;
     _statusBar.init(_pPublicInterface->getHinst(), hwnd, 6);
-	_statusBar.setPartWidth(STATUSBAR_DOC_SIZE, 200);
-	_statusBar.setPartWidth(STATUSBAR_CUR_POS, 260);
-	_statusBar.setPartWidth(STATUSBAR_EOF_FORMAT, 110);
+	_statusBar.setPartWidth(STATUSBAR_DOC_SIZE,     200);
+	_statusBar.setPartWidth(STATUSBAR_CUR_POS,      260);
+	_statusBar.setPartWidth(STATUSBAR_EOF_FORMAT,   110);
 	_statusBar.setPartWidth(STATUSBAR_UNICODE_TYPE, 120);
-	_statusBar.setPartWidth(STATUSBAR_TYPING_MODE, 30);
+	_statusBar.setPartWidth(STATUSBAR_TYPING_MODE,  30);
     _statusBar.display(willBeShown);
 
     _pMainWindow = &_mainDocTab;
@@ -380,7 +379,10 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	_dockingManager.init(_pPublicInterface->getHinst(), hwnd, &_pMainWindow);
 
 	if (nppGUI._isMinimizedToTray && _pTrayIco == NULL)
-		_pTrayIco = new trayIconControler(hwnd, IDI_M30ICON, IDC_MINIMIZED_TRAY, ::LoadIcon(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_M30ICON)), TEXT(""));
+	{
+		HICON icon = ::LoadIcon(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_M30ICON));
+		_pTrayIco = new trayIconControler(hwnd, IDI_M30ICON, IDC_MINIMIZED_TRAY, icon, TEXT(""));
+	}
 
 	checkSyncState();
 
@@ -422,9 +424,7 @@ LRESULT Notepad_plus::init(HWND hwnd)
 		::InsertMenu(hMacroMenu, posBase - 1, MF_BYPOSITION, (unsigned int)-1, 0);
 
 	for (size_t i = 0 ; i < nbMacro ; ++i)
-	{
 		::InsertMenu(hMacroMenu, posBase + i, MF_BYPOSITION, ID_MACRO + i, macros[i].toMenuItemString().c_str());
-	}
 
     if (nbMacro >= 1)
     {
@@ -554,7 +554,7 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	TCHAR menuName[64];
 	for (size_t i = 0 ; i < len ; ++i)
 	{
-		if (tmp[i]._itemName == TEXT(""))
+		if (tmp[i]._itemName.empty())
 		{
 			::GetMenuString(_mainMenuHandle, tmp[i]._cmdID, menuName, 64, MF_BYCOMMAND);
 			tmp[i]._itemName = purgeMenuItemString(menuName);
@@ -616,6 +616,8 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	_rebarBottom.init(_pPublicInterface->getHinst(), hwnd);
 	_toolBar.addToRebar(&_rebarTop);
 	_rebarTop.setIDVisible(REBAR_BAR_TOOLBAR, willBeShown);
+
+   checkMacroState();
 
 	//--Init dialogs--//
     _findReplaceDlg.init(_pPublicInterface->getHinst(), hwnd, &_pEditView);
@@ -712,8 +714,6 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	_mainEditView.getFocus();
 	return TRUE;
 }
-
-
 
 void Notepad_plus::killAllChildren()
 {
@@ -899,6 +899,26 @@ void Notepad_plus::saveDockingParams()
 
 	nppGUI._dockingData._pluginDockInfo = vPluginDockInfo;
 	nppGUI._dockingData._flaotingWindowInfo = vFloatingWindowInfo;
+}
+
+
+void Notepad_plus::saveUserDefineLangs()
+{
+	if (ScintillaEditView::getUserDefineDlg()->isDirty())
+		(NppParameters::getInstance())->writeUserDefinedLang();
+}
+
+
+void Notepad_plus::saveShortcuts()
+{
+	NppParameters::getInstance()->writeShortcuts();
+}
+
+
+void Notepad_plus::saveFindHistory()
+{
+	_findReplaceDlg.saveFindHistory();
+	(NppParameters::getInstance())->writeFindHistory();
 }
 
 
@@ -2100,6 +2120,12 @@ bool Notepad_plus::braceMatch()
 }
 
 
+void Notepad_plus::setLangStatus(LangType langType)
+{
+	_statusBar.setText(getLangDesc(langType).c_str(), STATUSBAR_DOC_TYPE);
+}
+
+
 void Notepad_plus::setDisplayFormat(formatType f)
 {
 	generic_string str;
@@ -2130,17 +2156,17 @@ void Notepad_plus::setUniModeText()
 		switch (um)
 		{
 			case uniUTF8:
-				uniModeTextString = TEXT("UTF-8"); break;
+				uniModeTextString = TEXT("UTF-8-BOM"); break;
 			case uni16BE:
-				uniModeTextString = TEXT("UCS-2 Big Endian"); break;
+				uniModeTextString = TEXT("UCS-2 BE BOM"); break;
 			case uni16LE:
-				uniModeTextString = TEXT("UCS-2 Little Endian"); break;
+				uniModeTextString = TEXT("UCS-2 LE BOM"); break;
 			case uni16BE_NoBOM:
-				uniModeTextString = TEXT("UCS-2 BE w/o BOM"); break;
+				uniModeTextString = TEXT("UCS-2 Big Endian"); break;
 			case uni16LE_NoBOM:
-				uniModeTextString = TEXT("UCS-2 LE w/o BOM"); break;
+				uniModeTextString = TEXT("UCS-2 Little Endian"); break;
 			case uniCookie:
-				uniModeTextString = TEXT("UTF-8 w/o BOM"); break;
+				uniModeTextString = TEXT("UTF-8"); break;
 			default :
 				uniModeTextString = TEXT("ANSI");
 		}
@@ -2502,96 +2528,6 @@ void Notepad_plus::maintainIndentation(TCHAR ch)
 	}
 }
 
-void Notepad_plus::specialCmd(int id)
-{
-	NppParameters *pNppParam = NppParameters::getInstance();
-
-	switch (id)
-	{
-        case IDM_VIEW_LINENUMBER:
-        case IDM_VIEW_SYMBOLMARGIN:
-		case IDM_VIEW_DOCCHANGEMARGIN:
-        {
-            int margin;
-            if (id == IDM_VIEW_LINENUMBER)
-                margin = ScintillaEditView::_SC_MARGE_LINENUMBER;
-            else //if (id == IDM_VIEW_SYMBOLMARGIN)
-                margin = ScintillaEditView::_SC_MARGE_SYBOLE;
-
-			if (_mainEditView.hasMarginShowed(margin))
-			{
-                _mainEditView.showMargin(margin, false);
-				_subEditView.showMargin(margin, false);
-			}
-            else
-			{
-				_mainEditView.showMargin(margin);
-                _subEditView.showMargin(margin);
-			}
-			break;
-        }
-
-        case IDM_VIEW_FOLDERMAGIN_SIMPLE:
-        case IDM_VIEW_FOLDERMAGIN_ARROW:
-        case IDM_VIEW_FOLDERMAGIN_CIRCLE:
-        case IDM_VIEW_FOLDERMAGIN_BOX:
-		case IDM_VIEW_FOLDERMAGIN:
-        {
-            folderStyle fStyle = (id == IDM_VIEW_FOLDERMAGIN_SIMPLE)?FOLDER_STYLE_SIMPLE:\
-								 (id == IDM_VIEW_FOLDERMAGIN_ARROW)?FOLDER_STYLE_ARROW:\
-								 (id == IDM_VIEW_FOLDERMAGIN_CIRCLE)?FOLDER_STYLE_CIRCLE:\
-								 (id == IDM_VIEW_FOLDERMAGIN)?FOLDER_STYLE_NONE:FOLDER_STYLE_BOX;
-
-            _mainEditView.setMakerStyle(fStyle);
-			_subEditView.setMakerStyle(fStyle);
-            break;
-        }
-
-		case IDM_VIEW_CURLINE_HILITING:
-		{
-            COLORREF colour = pNppParam->getCurLineHilitingColour();
-			_mainEditView.setCurrentLineHiLiting(!_pEditView->isCurrentLineHiLiting(), colour);
-			_subEditView.setCurrentLineHiLiting(!_pEditView->isCurrentLineHiLiting(), colour);
-			break;
-		}
-
-		case IDM_VIEW_EDGEBACKGROUND:
-		case IDM_VIEW_EDGELINE:
-		case IDM_VIEW_EDGENONE:
-		{
-			int mode;
-			switch (id)
-			{
-				case IDM_VIEW_EDGELINE:
-				{
-					mode = EDGE_LINE;
-					break;
-				}
-				case IDM_VIEW_EDGEBACKGROUND:
-				{
-					mode = EDGE_BACKGROUND;
-					break;
-				}
-				default :
-					mode = EDGE_NONE;
-			}
-			_mainEditView.execute(SCI_SETEDGEMODE, mode);
-			_subEditView.execute(SCI_SETEDGEMODE, mode);
-			break;
-		}
-
-		case IDM_VIEW_LWDEF:
-		case IDM_VIEW_LWALIGN:
-		case IDM_VIEW_LWINDENT:
-		{
-			int mode = (id == IDM_VIEW_LWALIGN)?SC_WRAPINDENT_SAME:\
-				(id == IDM_VIEW_LWINDENT)?SC_WRAPINDENT_INDENT:SC_WRAPINDENT_FIXED;
-			_mainEditView.execute(SCI_SETWRAPINDENTMODE, mode);
-			_subEditView.execute(SCI_SETWRAPINDENTMODE, mode);
-			break;
-		}
-	}
-}
 
 BOOL Notepad_plus::processIncrFindAccel(MSG *msg) const
 {
@@ -3071,7 +3007,8 @@ void Notepad_plus::getMainClientRect(RECT &rc) const
 	rc.bottom -= rc.top + _rebarBottom.getHeight() + _statusBar.getHeight();
 }
 
-void Notepad_plus::showView(int whichOne) {
+void Notepad_plus::showView(int whichOne)
+{
 	if (viewVisible(whichOne))	//no use making visible view visible
 		return;
 
@@ -3117,8 +3054,11 @@ void Notepad_plus::hideView(int whichOne)
 	{
 		_pMainSplitter->setWin0(windowToSet);
 	}
-	else // otherwise the main window is the spltter container that we just created
+	else
+	{
+		// otherwise the main window is the spltter container that we just created
 		_pMainWindow = windowToSet;
+	}
 
 	_subSplitter.display(false);	//hide splitter
 	//hide scintilla and doctab
@@ -3300,7 +3240,7 @@ void Notepad_plus::dockUserDlg()
         else
             pWindow = _pDocTab;
 
-        _pMainSplitter->create(pWindow, ScintillaEditView::getUserDefineDlg(), 8, RIGHT_FIX, 45);
+        _pMainSplitter->create(pWindow, ScintillaEditView::getUserDefineDlg(), 8, SplitterMode::RIGHT_FIX, 45);
     }
 
     if (bothActive())
@@ -5549,7 +5489,7 @@ Quote quotes[nbQuote] =
 	{"Anonymous #13", "Whoever says Paper beats Rock is an idiot. Next time I see someone say that I will throw a rock at them while they hold up a sheet of paper."},
 	{"Anonymous #14", "A better world is where chickens can cross the road without having their motives questioned."},
 	{"Anonymous #15", "If I didn't drink, how would my friends know I love them at 2 AM?"},
-	{"Anonymous #16", "What you do after sex?\n  A. Smoke a cigarette\n  B. Kiss your partener\n  C. Clear browser history\n"},
+	{"Anonymous #16", "What you do after sex?\n  A. Smoke a cigarette\n  B. Kiss your partner\n  C. Clear browser history\n"},
 	{"Anonymous #17", "All you need is love,\nall you want is sex,\nall you have is porn.\n"},
 	{"Anonymous #18", "Never get into fights with ugly people, they have nothing to lose."},
 	{"Anonymous #19", "F_CK: All I need is U."},
