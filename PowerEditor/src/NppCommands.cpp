@@ -1694,16 +1694,17 @@ void Notepad_plus::command(int id)
 			break;
 		}
 
-		case IDM_FORMAT_TODOS :
-		case IDM_FORMAT_TOUNIX :
-		case IDM_FORMAT_TOMAC :
+		case IDM_FORMAT_TODOS:
+		case IDM_FORMAT_TOUNIX:
+		case IDM_FORMAT_TOMAC:
 		{
-			Buffer * buf = _pEditView->getCurrentBuffer();
+			FormatType newFormat = (id == IDM_FORMAT_TODOS)
+				? FormatType::windows
+				: (id == IDM_FORMAT_TOUNIX) ? FormatType::unix : FormatType::macos;
 
-			int f = int((id == IDM_FORMAT_TODOS)?SC_EOL_CRLF:(id == IDM_FORMAT_TOUNIX)?SC_EOL_LF:SC_EOL_CR);
-
-			buf->setFormat((formatType)f);
-			_pEditView->execute(SCI_CONVERTEOLS, buf->getFormat());
+			Buffer* buf = _pEditView->getCurrentBuffer();
+			buf->setFormat(newFormat);
+			_pEditView->execute(SCI_CONVERTEOLS, static_cast<int>(buf->getFormat()));
 			break;
 		}
 
@@ -1856,7 +1857,7 @@ void Notepad_plus::command(int id)
 				return;
 			}
 
-            Buffer * buf = _pEditView->getCurrentBuffer();
+            Buffer* buf = _pEditView->getCurrentBuffer();
             if (buf->isDirty())
             {
 				generic_string warning, title;
@@ -1884,17 +1885,12 @@ void Notepad_plus::command(int id)
 					TEXT("Lose Undo Ability Waning"),
 					MB_YESNO);
 
-                if (answer == IDYES)
-                {
-                    // Do nothing
-                }
-                else
+                if (answer != IDYES)
                     return;
             }
 
-            if (!buf->isDirty())
+            if (not buf->isDirty())
             {
-				Buffer *buf = _pEditView->getCurrentBuffer();
 				buf->setEncoding(encoding);
 				buf->setUnicodeMode(uniCookie);
 				fileReload();
@@ -2296,13 +2292,13 @@ void Notepad_plus::command(int id)
 			::MessageBox(NULL, COMMAND_ARG_HELP, TEXT("Notepad++ Command Argument Help"), MB_OK);
 			break;
 		}
-		/*
+
 		case IDM_FORUM:
 		{
-			::ShellExecute(NULL, TEXT("open"), TEXT(""), NULL, NULL, SW_SHOWNORMAL);
+			::ShellExecute(NULL, TEXT("open"), TEXT("https://notepad-plus-plus.org/community/"), NULL, NULL, SW_SHOWNORMAL);
 			break;
 		}
-		*/
+
 		case IDM_ONLINESUPPORT:
 		{
 			::ShellExecute(NULL, TEXT("open"), TEXT("https://gitter.im/notepad-plus-plus/notepad-plus-plus"), NULL, NULL, SW_SHOWNORMAL);

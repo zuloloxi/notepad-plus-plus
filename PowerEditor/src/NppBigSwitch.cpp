@@ -122,8 +122,8 @@ LRESULT Notepad_plus_Window::runProc(HWND hwnd, UINT Message, WPARAM wParam, LPA
 LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam)
 {
 	LRESULT result = FALSE;
-
 	NppParameters *pNppParam = NppParameters::getInstance();
+
 	switch (Message)
 	{
 		case WM_NCACTIVATE:
@@ -318,19 +318,24 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 				return -1;
 			BufferID id = (BufferID)wParam;
 			Buffer * b = MainFileManager->getBufferByID(id);
-			return b->getFormat();
+			return static_cast<LRESULT>(b->getFormat());
 		}
 
 		case NPPM_SETBUFFERFORMAT:
 		{
 			if (!wParam)
 				return FALSE;
-			if (lParam < WIN_FORMAT || lParam >= UNIX_FORMAT)
+
+			FormatType newFormat = convertIntToFormatType(static_cast<int>(lParam), FormatType::unknown);
+			if (FormatType::unknown == newFormat)
+			{
+				assert(false and "invalid buffer format message");
 				return FALSE;
+			}
 
 			BufferID id = (BufferID)wParam;
 			Buffer * b = MainFileManager->getBufferByID(id);
-			b->setFormat((formatType)lParam);
+			b->setFormat(newFormat);
 			return TRUE;
 		}
 
@@ -2042,7 +2047,6 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 
 		case NPPM_GETAPPDATAPLUGINSALLOWED:
 		{
-			NppParameters *pNppParam = NppParameters::getInstance();
 			const TCHAR *appDataNpp = pNppParam->getAppDataNppDir();
 			if (appDataNpp[0])
 			{
@@ -2058,7 +2062,6 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 		//
 		case NPPM_INTERNAL_SETTING_HISTORY_SIZE:
 		{
-			NppParameters *pNppParam = NppParameters::getInstance();
 			_lastRecentFileList.setUserMaxNbLRF(pNppParam->getNbMaxRecentFile());
 			break;
 		}

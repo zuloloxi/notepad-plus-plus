@@ -49,6 +49,37 @@ long Buffer::_recentTagCtr = 0;
 
 
 
+
+namespace // anonymous
+{
+
+	static FormatType getEOLFormatForm(const char* const data, size_t length, FormatType defvalue = FormatType::osdefault)
+	{
+		assert(length == 0 or data != nullptr && "invalid buffer for getEOLFormatForm()");
+
+		for (size_t i = 0; i != length; ++i)
+		{
+			if (data[i] == CR)
+			{
+				if (i + 1 < length && data[i + 1] == LF)
+					return FormatType::windows;
+
+				return FormatType::macos;
+			}
+
+			if (data[i] == LF)
+				return FormatType::unix;
+		}
+
+		return defvalue; // fallback unknown
+	}
+
+
+} // anonymous namespace
+
+
+
+
 Buffer::Buffer(FileManager * pManager, BufferID id, Document doc, DocFileStatus type, const TCHAR *fileName)
 	// type must be either DOC_REGULAR or DOC_UNNAMED
 	: _pManager(pManager)
@@ -72,7 +103,7 @@ Buffer::Buffer(FileManager * pManager, BufferID id, Document doc, DocFileStatus 
 	checkFileState();
 
 	// reset after initialization
-	_isDirty = false;
+	_isDirty   = false;
 	_canNotify = true;
 	_needLexer = false; // new buffers do not need lexing, Scintilla takes care of that
 }
@@ -560,21 +591,25 @@ BufferID FileManager::loadFile(const TCHAR * filename, Document doc, int encodin
 	Utf8_16_Read UnicodeConvertor;	//declare here so we can get information after loading is done
 
 	char data[blockSize + 8]; // +8 for incomplete multibyte char
-	formatType format;
-	bool res = loadFileData(doc, backupFileName?backupFileName:fullpath, data, &UnicodeConvertor, L_TEXT, encoding, &format);
+	FormatType bkformat = FormatType::unknown;
+
+	bool res = loadFileData(doc, backupFileName?backupFileName:fullpath, data, &UnicodeConvertor, L_TEXT, encoding, &bkformat);
 	if (res)
 	{
 		Buffer* newBuf = new Buffer(this, _nextBufferID, doc, DOC_REGULAR, fullpath);
 		BufferID id = (BufferID) newBuf;
 		newBuf->_id = id;
+
 		if (backupFileName != NULL)
 		{
 			newBuf->_backupFileName = backupFileName;
 			if (!PathFileExists(fullpath))
 				newBuf->_currentStatus = DOC_UNNAMED;
 		}
+
 		if (fileNameTimestamp != 0)
 			newBuf->_timeStamp = fileNameTimestamp;
+
 		_buffers.push_back(newBuf);
 		++_nrBufs;
 		Buffer* buf = _buffers.at(_nrBufs - 1);
@@ -590,11 +625,11 @@ BufferID FileManager::loadFile(const TCHAR * filename, Document doc, int encodin
 			// 3 formats : WIN_FORMAT, UNIX_FORMAT and MAC_FORMAT
 			if (nullptr != UnicodeConvertor.getNewBuf())
 			{
-				int format = getEOLFormatForm(UnicodeConvertor.getNewBuf(), UnicodeConvertor.getNewSize());
-				buf->setFormat(format == -1?WIN_FORMAT:(formatType)format);
+				FormatType format = getEOLFormatForm(UnicodeConvertor.getNewBuf(), UnicodeConvertor.getNewSize());
+				buf->setFormat(format);
 			}
 			else
-				buf->setFormat(WIN_FORMAT);
+				buf->setFormat(FormatType::osdefault);
 
 			UniMode um = UnicodeConvertor.getEncoding();
 			if (um == uni7Bit)
@@ -607,7 +642,7 @@ BufferID FileManager::loadFile(const TCHAR * filename, Document doc, int encodin
             // Test if encoding is set to UTF8 w/o BOM (usually for utf8 indicator of xml or html)
             buf->setEncoding((encoding == SC_CP_UTF8)?-1:encoding);
             buf->setUnicodeMode(uniCookie);
-			buf->setFormat(format);
+			buf->setFormat(bkformat);
 		}
 
 		//determine buffer properties
@@ -631,28 +666,29 @@ bool FileManager::reloadBuffer(BufferID id)
 	buf->_canNotify = false;	//disable notify during file load, we dont want dirty to be triggered
 	int encoding = buf->getEncoding();
 	char data[blockSize + 8]; // +8 for incomplete multibyte char
-	formatType format;
-	bool res = loadFileData(doc, buf->getFullPathName(), data, &UnicodeConvertor, buf->getLangType(), encoding, &format);
+	FormatType bkformat;
+
+	bool res = loadFileData(doc, buf->getFullPathName(), data, &UnicodeConvertor, buf->getLangType(), encoding, &bkformat);
 	buf->_canNotify = true;
+
 	if (res)
 	{
 		if (encoding == -1)
 		{
 			if (nullptr != UnicodeConvertor.getNewBuf())
 			{
-				int format = getEOLFormatForm(UnicodeConvertor.getNewBuf(), UnicodeConvertor.getNewSize());
-				buf->setFormat(format == -1?WIN_FORMAT:(formatType)format);
+				FormatType format = getEOLFormatForm(UnicodeConvertor.getNewBuf(), UnicodeConvertor.getNewSize());
+				buf->setFormat(format);
 			}
 			else
-			{
-				buf->setFormat(WIN_FORMAT);
-			}
+				buf->setFormat(FormatType::osdefault);
+
 			buf->setUnicodeMode(UnicodeConvertor.getEncoding());
 		}
 		else
 		{
 			buf->setEncoding(encoding);
-			buf->setFormat(format);
+			buf->setFormat(bkformat);
 			buf->setUnicodeMode(uniCookie);
 		}
 	}
@@ -887,11 +923,11 @@ bool FileManager::backupCurrentBuffer()
 	else // buffer not dirty, sync: delete the backup file
 	{
 		generic_string backupFilePath = buffer->getBackupFileName();
-		if (backupFilePath != TEXT(""))
+		if (not backupFilePath.empty())
 		{
 			// delete backup file
 			generic_string file2Delete = buffer->getBackupFileName();
-			buffer->setBackupFileName(TEXT(""));
+			buffer->setBackupFileName(generic_string());
 			result = (::DeleteFile(file2Delete.c_str()) != 0);
 
 			// Session changes, save it
@@ -957,13 +993,14 @@ bool FileManager::deleteCurrentBufferBackup()
 	if (not backupFilePath.empty())
 	{
 		// delete backup file
-		buffer->setBackupFileName(TEXT(""));
+		buffer->setBackupFileName(generic_string());
 		result = (::DeleteFile(backupFilePath.c_str()) != 0);
 	}
 
 	// set to signaled state via destructor EventReset.
 	return result;
 }
+
 
 bool FileManager::saveBuffer(BufferID id, const TCHAR * filename, bool isCopy, generic_string * error_msg)
 {
@@ -1079,11 +1116,11 @@ bool FileManager::saveBuffer(BufferID id, const TCHAR * filename, bool isCopy, g
 
 			/* for saveAs it's not necessary since this action is for the "current" directory, so we let manage in SAVEPOINTREACHED event
 			generic_string backupFilePath = buffer->getBackupFileName();
-			if (backupFilePath != TEXT(""))
+			if (not backupFilePath.empty())
 			{
 				// delete backup file
 				generic_string file2Delete = buffer->getBackupFileName();
-				buffer->setBackupFileName(TEXT(""));
+				buffer->setBackupFileName(generic_string());
 				::DeleteFile(file2Delete.c_str());
 			}
 			*/
@@ -1104,7 +1141,7 @@ bool FileManager::saveBuffer(BufferID id, const TCHAR * filename, bool isCopy, g
 		if (not backupFilePath.empty())
 		{
 			// delete backup file
-			buffer->setBackupFileName(TEXT(""));
+			buffer->setBackupFileName(generic_string());
 			::DeleteFile(backupFilePath.c_str());
 		}
 
@@ -1209,7 +1246,7 @@ int FileManager::detectCodepage(char* buf, size_t len)
 }
 
 inline bool FileManager::loadFileData(Document doc, const TCHAR * filename, char* data, Utf8_16_Read * UnicodeConvertor,
-	LangType language, int & encoding, formatType *pFormat)
+	LangType language, int & encoding, FormatType* pFormat)
 {
 	FILE *fp = generic_fopen(filename, TEXT("rb"));
 	if (!fp)
@@ -1246,7 +1283,6 @@ inline bool FileManager::loadFileData(Document doc, const TCHAR * filename, char
 	}
 	_pscratchTilla->execute(SCI_CLEARALL);
 
-	WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 
 	if (language < L_EXTERNAL)
 	{
@@ -1256,28 +1292,30 @@ inline bool FileManager::loadFileData(Document doc, const TCHAR * filename, char
 	{
 		int id = language - L_EXTERNAL;
 		TCHAR * name = NppParameters::getInstance()->getELCFromIndex(id)._name;
+		WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 		const char *pName = wmc->wchar2char(name, CP_ACP);
 		_pscratchTilla->execute(SCI_SETLEXERLANGUAGE, 0, (LPARAM)pName);
 	}
 
 	if (encoding != -1)
-	{
 		_pscratchTilla->execute(SCI_SETCODEPAGE, SC_CP_UTF8);
-	}
 
 	bool success = true;
-	int format = -1;
-	__try {
+	FormatType format = FormatType::unknown;
+	__try
+	{
 		// First allocate enough memory for the whole file (this will reduce memory copy during loading)
 		_pscratchTilla->execute(SCI_ALLOCATE, WPARAM(bufferSizeRequested));
-		if(_pscratchTilla->execute(SCI_GETSTATUS) != SC_STATUS_OK) throw;
+		if (_pscratchTilla->execute(SCI_GETSTATUS) != SC_STATUS_OK)
+			throw;
 
 		size_t lenFile = 0;
 		size_t lenConvert = 0;	//just in case conversion results in 0, but file not empty
 		bool isFirstTime = true;
 		int incompleteMultibyteChar = 0;
 
-		do {
+		do
+		{
 			lenFile = fread(data+incompleteMultibyteChar, 1, blockSize-incompleteMultibyteChar, fp) + incompleteMultibyteChar;
 			if (lenFile == 0) break;
 
@@ -1307,54 +1345,62 @@ inline bool FileManager::loadFileData(Document doc, const TCHAR * filename, char
 				}
 				else
 				{
-					WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
+					WcharMbcsConvertor* wmc = WcharMbcsConvertor::getInstance();
 					int newDataLen = 0;
 					const char *newData = wmc->encode(encoding, SC_CP_UTF8, data, lenFile, &newDataLen, &incompleteMultibyteChar);
 					_pscratchTilla->execute(SCI_APPENDTEXT, newDataLen, (LPARAM)newData);
 				}
 
-				if (format == -1)
-					format = getEOLFormatForm(data, lenFile);
+				if (format == FormatType::unknown)
+					format = getEOLFormatForm(data, lenFile, FormatType::unknown);
 			}
 			else
 			{
 				lenConvert = UnicodeConvertor->convert(data, lenFile);
 				_pscratchTilla->execute(SCI_APPENDTEXT, lenConvert, (LPARAM)(UnicodeConvertor->getNewBuf()));
 			}
-			if(_pscratchTilla->execute(SCI_GETSTATUS) != SC_STATUS_OK) throw;
 
-			if(incompleteMultibyteChar != 0)
+			if (_pscratchTilla->execute(SCI_GETSTATUS) != SC_STATUS_OK)
+				throw;
+
+			if (incompleteMultibyteChar != 0)
 			{
 				// copy bytes to next buffer
 				memcpy(data, data+blockSize-incompleteMultibyteChar, incompleteMultibyteChar);
 			}
 
-		} while (lenFile > 0);
-	} __except(EXCEPTION_EXECUTE_HANDLER) {  //TODO: should filter correctly for other exceptions; the old filter(GetExceptionCode(), GetExceptionInformation()) was only catching access violations
+		}
+		while (lenFile > 0);
+	}
+	__except(EXCEPTION_EXECUTE_HANDLER) //TODO: should filter correctly for other exceptions; the old filter(GetExceptionCode(), GetExceptionInformation()) was only catching access violations
+	{
 		::MessageBox(NULL, TEXT("File is too big to be opened by Notepad++"), TEXT("File open problem"), MB_OK|MB_APPLMODAL);
 		success = false;
 	}
 
 	fclose(fp);
 
-	if (pFormat != NULL)
-	{
-		*pFormat = (format == -1)?WIN_FORMAT:(formatType)format;
-	}
+	// broadcast the format
+	if (pFormat != nullptr)
+		*pFormat = (format != FormatType::unknown) ? format : FormatType::osdefault;
+
 	_pscratchTilla->execute(SCI_EMPTYUNDOBUFFER);
 	_pscratchTilla->execute(SCI_SETSAVEPOINT);
-	if (ro) {
+
+	if (ro)
 		_pscratchTilla->execute(SCI_SETREADONLY, true);
-	}
+
 	_pscratchTilla->execute(SCI_SETDOCPOINTER, 0, _scratchDocDefault);
 	return success;
 }
 
-BufferID FileManager::getBufferFromName(const TCHAR * name)
+
+BufferID FileManager::getBufferFromName(const TCHAR* name)
 {
 	TCHAR fullpath[MAX_PATH];
 	::GetFullPathName(name, MAX_PATH, fullpath, NULL);
 	::GetLongPathName(fullpath, fullpath, MAX_PATH);
+
 	for(size_t i = 0; i < _buffers.size(); i++)
 	{
 		if (!lstrcmpi(name, _buffers.at(i)->getFullPathName()))
@@ -1363,15 +1409,20 @@ BufferID FileManager::getBufferFromName(const TCHAR * name)
 	return BUFFER_INVALID;
 }
 
-BufferID FileManager::getBufferFromDocument(Document doc) {
-	for(size_t i = 0; i < _nrBufs; ++i) {
+
+BufferID FileManager::getBufferFromDocument(Document doc)
+{
+	for (size_t i = 0; i < _nrBufs; ++i)
+	{
 		if (_buffers[i]->_doc == doc)
 			return _buffers[i]->_id;
 	}
 	return BUFFER_INVALID;
 }
 
-bool FileManager::createEmptyFile(const TCHAR * path) {
+
+bool FileManager::createEmptyFile(const TCHAR * path)
+{
 	FILE * file = generic_fopen(path, TEXT("wb"));
 	if (!file)
 		return false;
@@ -1379,14 +1430,18 @@ bool FileManager::createEmptyFile(const TCHAR * path) {
 	return true;
 }
 
-int FileManager::getFileNameFromBuffer(BufferID id, TCHAR * fn2copy) {
+
+int FileManager::getFileNameFromBuffer(BufferID id, TCHAR * fn2copy)
+{
 	if (getBufferIndexByID(id) == -1)
 		return -1;
+
 	Buffer* buf = getBufferByID(id);
 	if (fn2copy)
 		lstrcpy(fn2copy, buf->getFullPathName());
 	return lstrlen(buf->getFullPathName());
 }
+
 
 int FileManager::docLength(Buffer* buffer) const
 {
@@ -1394,29 +1449,4 @@ int FileManager::docLength(Buffer* buffer) const
 	int docLen = _pscratchTilla->getCurrentDocLen();
 	_pscratchTilla->execute(SCI_SETDOCPOINTER, 0, _scratchDocDefault);
 	return docLen;
-}
-
-int FileManager::getEOLFormatForm(const char* const data, size_t length) const
-{
-	assert(data != nullptr && "invalid buffer for getEOLFormatForm()");
-
-	for (size_t i = 0; i != length; ++i)
-	{
-		if (data[i] == CR)
-		{
-			if (i+1 < length && data[i+1] == LF)
-			{
-				return int(WIN_FORMAT);
-			}
-			else
-			{
-				return int(MAC_FORMAT);
-			}
-		}
-		if (data[i] == LF)
-		{
-			return int(UNIX_FORMAT);
-		}
-	}
-	return -1;
 }

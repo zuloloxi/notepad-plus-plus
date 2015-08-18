@@ -56,11 +56,6 @@ enum tb_stat {tb_saved, tb_unsaved, tb_ro};
 
 #define NPP_INTERNAL_FUCTION_STR TEXT("Notepad++::InternalFunction")
 
-#define SOURCECODEPRO_FONT  TEXT("SourceCodePro-Regular.ttf")
-#define SOURCECODEPRO_I_FONT  TEXT("SourceCodePro-It.ttf")
-#define SOURCECODEPRO_B_FONT  TEXT("SourceCodePro-Bold.ttf")
-#define SOURCECODEPRO_IB_FONT  TEXT("SourceCodePro-BoldIt.ttf")
-
 int docTabIconIDs[] = {IDI_SAVED_ICON, IDI_UNSAVED_ICON, IDI_READONLY_ICON};
 
 ToolBarButtonUnit toolBarIcons[] = {
@@ -197,22 +192,12 @@ Notepad_plus::~Notepad_plus()
 	delete _pProjectPanel_3;
 	delete _pDocMap;
 	delete _pFuncList;
-	::RemoveFontResourceEx(SOURCECODEPRO_FONT, FR_PRIVATE, 0);
-	::RemoveFontResourceEx(SOURCECODEPRO_I_FONT, FR_PRIVATE, 0);
-	::RemoveFontResourceEx(SOURCECODEPRO_B_FONT, FR_PRIVATE, 0);
-	::RemoveFontResourceEx(SOURCECODEPRO_IB_FONT, FR_PRIVATE, 0);
 }
 
 LRESULT Notepad_plus::init(HWND hwnd)
 {
 	NppParameters *pNppParam = NppParameters::getInstance();
 	NppGUI & nppGUI = (NppGUI &)pNppParam->getNppGUI();
-
-	// Add Main font
-	::AddFontResourceEx(SOURCECODEPRO_FONT, FR_PRIVATE, 0);
-	::AddFontResourceEx(SOURCECODEPRO_I_FONT, FR_PRIVATE, 0);
-	::AddFontResourceEx(SOURCECODEPRO_B_FONT, FR_PRIVATE, 0);
-	::AddFontResourceEx(SOURCECODEPRO_IB_FONT, FR_PRIVATE, 0);
 
 	// Menu
 	_mainMenuHandle = ::GetMenu(hwnd);
@@ -617,7 +602,7 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	_toolBar.addToRebar(&_rebarTop);
 	_rebarTop.setIDVisible(REBAR_BAR_TOOLBAR, willBeShown);
 
-   checkMacroState();
+	checkMacroState();
 
 	//--Init dialogs--//
     _findReplaceDlg.init(_pPublicInterface->getHinst(), hwnd, &_pEditView);
@@ -636,23 +621,29 @@ LRESULT Notepad_plus::init(HWND hwnd)
 
 	bool uddShow = false;
 	switch (uddStatus)
-    {
-        case UDD_SHOW :                 // show & undocked
+	{
+		case UDD_SHOW: // show & undocked
+		{
 			udd->doDialog(true, _nativeLangSpeaker.isRTL());
 			_nativeLangSpeaker.changeUserDefineLang(udd);
 			uddShow = true;
-            break;
-        case UDD_DOCKED : {              // hide & docked
+			break;
+		}
+        case UDD_DOCKED: // hide & docked
+		{
 			_isUDDocked = true;
-            break;}
-        case (UDD_SHOW | UDD_DOCKED) :    // show & docked
-            udd->doDialog(true, _nativeLangSpeaker.isRTL());
-			_nativeLangSpeaker.changeUserDefineLang(udd);
-            ::SendMessage(udd->getHSelf(), WM_COMMAND, IDC_DOCK_BUTTON, 0);
-			uddShow = true;
             break;
+		}
+        case (UDD_SHOW | UDD_DOCKED) :    // show & docked
+		{
+			udd->doDialog(true, _nativeLangSpeaker.isRTL());
+			_nativeLangSpeaker.changeUserDefineLang(udd);
+			::SendMessage(udd->getHSelf(), WM_COMMAND, IDC_DOCK_BUTTON, 0);
+			uddShow = true;
+			break;
+		}
 
-		default :                        // hide & undocked
+		default: // hide & undocked
 			break;
     }
 
@@ -665,19 +656,21 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	//
 	// Initialize the default foreground & background color
 	//
-	StyleArray & globalStyles = (NppParameters::getInstance())->getGlobalStylers();
-	int i = globalStyles.getStylerIndexByID(STYLE_DEFAULT);
-	if (i != -1)
 	{
-		Style & style = globalStyles.getStyler(i);
-		(NppParameters::getInstance())->setCurrentDefaultFgColor(style._fgColor);
-		(NppParameters::getInstance())->setCurrentDefaultBgColor(style._bgColor);
+		StyleArray & globalStyles = (NppParameters::getInstance())->getGlobalStylers();
+		int i = globalStyles.getStylerIndexByID(STYLE_DEFAULT);
+		if (i != -1)
+		{
+			Style & style = globalStyles.getStyler(i);
+			(NppParameters::getInstance())->setCurrentDefaultFgColor(style._fgColor);
+			(NppParameters::getInstance())->setCurrentDefaultBgColor(style._bgColor);
+		}
 	}
 
 	//
 	// launch the plugin dlg memorized at the last session
 	//
-	DockingManagerData &dmd = nppGUI._dockingData;
+	DockingManagerData& dmd = nppGUI._dockingData;
 
 	_dockingManager.setDockedContSize(CONT_LEFT  , nppGUI._dockingData._leftWidth);
 	_dockingManager.setDockedContSize(CONT_RIGHT , nppGUI._dockingData._rightWidth);
@@ -686,17 +679,13 @@ LRESULT Notepad_plus::init(HWND hwnd)
 
 	for (size_t i = 0, len = dmd._pluginDockInfo.size(); i < len ; ++i)
 	{
-		PluginDlgDockingInfo & pdi = dmd._pluginDockInfo[i];
+		PluginDlgDockingInfo& pdi = dmd._pluginDockInfo[i];
 		if (pdi._isVisible)
 		{
 			if (pdi._name == NPP_INTERNAL_FUCTION_STR)
-			{
 				_internalFuncIDs.push_back(pdi._internalID);
-			}
 			else
-			{
 				_pluginsManager.runPluginCommand(pdi._name.c_str(), pdi._internalID);
-			}
 		}
 	}
 
@@ -705,6 +694,7 @@ LRESULT Notepad_plus::init(HWND hwnd)
 		ContainerTabInfo & cti = dmd._containerTabInfo[i];
 		_dockingManager.setActiveTab(cti._cont, cti._activeTab);
 	}
+
 	//Load initial docs into doctab
 	loadBufferIntoView(_mainEditView.getCurrentBufferID(), MAIN_VIEW);
 	loadBufferIntoView(_subEditView.getCurrentBufferID(), SUB_VIEW);
@@ -1826,6 +1816,7 @@ void Notepad_plus::checkDocState()
 		bool isUserReadOnly = curBuf->getUserReadOnly();
 		::CheckMenuItem(_mainMenuHandle, IDM_EDIT_SETREADONLY, MF_BYCOMMAND | (isUserReadOnly?MF_CHECKED:MF_UNCHECKED));
 	}
+
 	enableCommand(IDM_FILE_DELETE, isFileExisting, MENU);
 	enableCommand(IDM_FILE_RENAME, isFileExisting, MENU);
 
@@ -2126,22 +2117,19 @@ void Notepad_plus::setLangStatus(LangType langType)
 }
 
 
-void Notepad_plus::setDisplayFormat(formatType f)
+void Notepad_plus::setDisplayFormat(FormatType format)
 {
-	generic_string str;
-	switch (f)
+	const TCHAR* str = TEXT("??");
+	switch (format)
 	{
-		case MAC_FORMAT :
-			str = TEXT("Macintosh");
-			break;
-		case UNIX_FORMAT :
-			str = TEXT("UNIX");
-			break;
-		default :
-			str = TEXT("Dos\\Windows");
+		case FormatType::windows: str = TEXT("Dos\\Windows"); break;
+		case FormatType::macos:   str = TEXT("Macintosh"); break;
+		case FormatType::unix:    str = TEXT("UNIX"); break;
+		case FormatType::unknown: str = TEXT("Unknown"); assert(false);  break;
 	}
-	_statusBar.setText(str.c_str(), STATUSBAR_EOF_FORMAT);
+	_statusBar.setText(str, STATUSBAR_EOF_FORMAT);
 }
+
 
 void Notepad_plus::setUniModeText()
 {
@@ -3284,15 +3272,27 @@ void Notepad_plus::docOpenInNewInstance(FileTransferMode mode, int x, int y)
 	generic_string command = TEXT("\"");
 	command += nppName;
 	command += TEXT("\"");
+	command += TEXT(" \"$(FULL_CURRENT_PATH)\" -multiInst -nosession");
 
-	command += TEXT(" \"$(FULL_CURRENT_PATH)\" -multiInst -nosession -x");
-	TCHAR pX[10], pY[10];
-	generic_itoa(x, pX, 10);
-	generic_itoa(y, pY, 10);
+	if (x) {
+		TCHAR pX[10];
+		generic_itoa(x, pX, 10);
+		command += TEXT(" -x");
+		command += pX;
+	}
+	if (y) {
+		TCHAR pY[10];
+		generic_itoa(y, pY, 10);
+		command += TEXT(" -y");
+		command += pY;
+	}
 
-	command += pX;
-	command += TEXT(" -y");
-	command += pY;
+	command += TEXT(" -l");
+	command += ScintillaEditView::langNames[buf->getLangType()].lexerName;
+	command += TEXT(" -n");
+	command += to_wstring(_pEditView->getCurrentLineNumber() + 1);
+	command += TEXT(" -c");
+	command += to_wstring(_pEditView->getCurrentColumnNumber() + 1);
 
 	Command cmd(command);
 	cmd.run(_pPublicInterface->getHSelf());
@@ -3490,6 +3490,7 @@ void Notepad_plus::staticCheckMenuAndTB() const
 	checkMenuItem(IDM_VIEW_WRAP_SYMBOL, _pEditView->isWrapSymbolVisible());
 }
 
+
 void Notepad_plus::dynamicCheckMenuAndTB() const
 {
 	//Format conversion
@@ -3497,12 +3498,14 @@ void Notepad_plus::dynamicCheckMenuAndTB() const
 	checkUnicodeMenuItems();
 }
 
-void Notepad_plus::enableConvertMenuItems(formatType f) const
+
+void Notepad_plus::enableConvertMenuItems(FormatType format) const
 {
-	enableCommand(IDM_FORMAT_TODOS, (f != WIN_FORMAT), MENU);
-	enableCommand(IDM_FORMAT_TOUNIX, (f != UNIX_FORMAT), MENU);
-	enableCommand(IDM_FORMAT_TOMAC, (f != MAC_FORMAT), MENU);
+	enableCommand(IDM_FORMAT_TODOS,  (format != FormatType::windows), MENU);
+	enableCommand(IDM_FORMAT_TOUNIX, (format != FormatType::unix),    MENU);
+	enableCommand(IDM_FORMAT_TOMAC,  (format != FormatType::macos),   MENU);
 }
+
 
 void Notepad_plus::checkUnicodeMenuItems() const
 {
