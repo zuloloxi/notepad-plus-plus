@@ -1366,6 +1366,7 @@ public:
 	void setCurLineHilitingColour(COLORREF colour2Set);
 
 	void setFontList(HWND hWnd);
+	bool isInFontList(const generic_string fontName2Search) const;
 	const std::vector<generic_string>& getFontList() const { return _fontlist; }
 
 	int getNbUserLang() const {return _nbUserLang;}
@@ -1625,7 +1626,10 @@ private:
 	WNDPROC _enableThemeDialogTextureFuncAddr;
 	bool _isLocal;
 
-
+public:
+	void setShortcutDirty() { _isAnyShortcutModified = true; };
+private:
+	bool _isAnyShortcutModified = false;
 	std::vector<CommandShortcut> _shortcuts;			//main menu shortuts. Static size
 	std::vector<int> _customizedShortcuts;			//altered main menu shortcuts. Indices static. Needed when saving alterations
 	std::vector<MacroShortcut> _macros;				//macro shortcuts, dynamic size, defined on loading macros and adding/deleting them
